@@ -1,6 +1,13 @@
 CSE 509 Project: Rootkit
 Amit Bapat
 
+System Specification:
+    Linux Distro: Ubuntu 14.04 64 bit
+    Kernel: 4.2.0-42-generic
+
+How to Run:
+    Compile Kernel Modules- "make"
+    Load kernel module- "insmod rootkit.ko"
 
 Functionality:
 1) Give the ability to a malicious process to elevate its uid to 0 (root) upon demand
@@ -23,4 +30,6 @@ Resources:
 
 For figuring out how to intercept syscall table:
 http://stackoverflow.com/questions/2103315/linux-kernel-system-call-hooking-example
+http://books.gigatux.nl/mirror/networksecuritytools/0596007949/networkst-CHP-7-SECT-2.html
+
 
