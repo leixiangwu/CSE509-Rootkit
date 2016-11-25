@@ -15,7 +15,9 @@ Functionality:
 setuid with a "magic number" as the uid. This argument is a number that will
 not be called normally (12345 for this case). The setuid will then elevate the
 process and grant root privileges.
-2) We called original read inside hacked read and modified the buf and bytes returned such that backdoor is filtered out if the file is /etc/passwd or /etc/shadow
+2) We called original read inside hacked read and modified the buf and
+ bytes returned such that backdoor is filtered out if the file is 
+ /etc/passwd or /etc/shadow
 
 
 Testing:
@@ -24,7 +26,10 @@ Testing:
 call setuid() with the supplied argument. With an unprivileged user, run setuid 0
 and it will fail. Next, run: setuid 12345 (where 12345 is the magic number) and 
 it will succeed and print out the current privileges.
-2) Load the module and cat /etc/passwd or cat /etc/shadow to check contents - the backdoor will be not be shown while the module is loaded; unload the module and check contents again - you will see the backdoor now
+2) Load the module and cat /etc/passwd or cat /etc/shadow to check contents 
+- the backdoor will be not be shown while the module is loaded; 
+unload the module and check contents again - you will see the backdoor 
+now
 
 Resources:
 
