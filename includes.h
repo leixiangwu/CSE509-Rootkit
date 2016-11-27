@@ -81,4 +81,4 @@ const char * const HIDDEN_PROCESSES[] = {"bash", "ps", "sshd"};
 
 // List of files to hide from getdents and open
 const char * const HIDDEN_FILES[] = {"hideme.txt", "rootkit.c", "includes.h", 
-                                        "Makefile"};
+                                        "Makefile", "I-am-secret-directory"};
