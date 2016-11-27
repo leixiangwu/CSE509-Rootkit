@@ -11,7 +11,9 @@ System Specification:
 
 How to Run:
     Compile Kernel Modules- "make"
-    Load kernel module- "insmod rootkit.ko"
+    Load kernel module- "sudo insmod rootkit.ko"
+    Unload kernel module- "sudo rmmod rootkit"
+    Clean modules - "make clean"
 
 Functionality:
 1) Give the ability to a malicious process to elevate its uid to 0 (root) upon demand
