@@ -1,4 +1,4 @@
-CSE 509 Project: Rootkit
+SE 509 Project: Rootkit
 Amit Bapat          
 Varun Sayal             108766516
 Leixiang Wu         
@@ -46,6 +46,10 @@ now
 - There is an array specified in includes.h. This array called HIDDEN_FILES has 
 a few different file names. Add whatever file you would like to test and load the module.
 Verify that this file can not be ls'd or opened.
+4) Hide the module from lsmod
+- Load the module and run lsmod. All other modules except "rootkit" will be displayed.
+You can also remove the function "remove rootkit" to check that lsmod would show it 
+otherwise.
 
 Resources:
 
