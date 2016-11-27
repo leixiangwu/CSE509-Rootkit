@@ -19,7 +19,7 @@
   Team: ROP like it's hot
   Members:
   Amit Bapat          
-  Varun Sayal 108766516
+  Varun Sayal 108766516                varun.sayal@stonybrook.edu
   Leixiang Wu 108520163                leixiang.wu@stonybrook.edu
   Poojitha Ponakala
 
@@ -145,9 +145,9 @@
         filtered out when the files /etc/passwd and /etc/shadow are read
 
     3) Hide certain files.
-      - The getdents and open syscalls were hijacked so that any of the
-        files provided in the includes.h array will not be returned by getdents. In the case of
-        open if one of our hidden files is an argument, we simply return -ENOENT
+      - The getdents and open syscalls were hijacked so that any of the files provided 
+        in the includes.h array (called HIDDEN_FILES) will not be returned by getdents. 
+        In the case of open if one of our hidden files is an argument, we simply return -ENOENT
 
     4) Hide the module from lsmod. 
       - In the hijacked read, we simply remove the entry for our
@@ -205,3 +205,5 @@
 	http://stackoverflow.com/questions/8250078/how-can-i-get-a-filename-from-a-file-descriptor-inside-a-kernel-module
 	http://stackoverflow.com/questions/1184274/how-to-read-write-files-within-a-linux-kernel-module
 	http://lxr.free-electrons.com/
+    https://www.thc.org/papers/LKM_HACKING.html
+    http://commons.oreilly.com/wiki/index.php/Network_Security_Tools/Modifying_and_Hacking_Security_Tools/Fun_with_Linux_Kernel_Modules
