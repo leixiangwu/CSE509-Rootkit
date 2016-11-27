@@ -30,15 +30,21 @@ them already
 filtered out when the files /etc/passwd and /etc/shadow are read
 
 3) Hide certain files.
-    -  The getdents and open syscalls were hijacked so that any of the
+- The getdents and open syscalls were hijacked so that any of the
 files provided in the includes.h array will not be returned by getdents. In the case of
 open if one of our hidden files is an argument, we simply return -ENOENT
 
 4) Hide the module from lsmod. 
-    - In the hijacked read, we simply remove the entry for our
+- In the hijacked read, we simply remove the entry for our
 rootkit (named  "rookit"). Once this entry is removed from /proc/modules, lsmod will cease
 printing it. It is also removed from a regular cat of the file.
 
+5) Hides processes from the process table when a user does a "ps"
+- When a user issues 'ps' command, getdents system call is called to find all the directories
+inside of /proc/. Each directory that is in /proc/ is pid. When the rootkit module is loaded,
+getdents system call is hijacked so that any of the process matches a process name provided in
+the HIDDEN_PROCESSES includes.h array will be removed from getdents. Note in hijacked getdents,
+we find the process name by using pid number.
 
 Testing:
 1) Give the ability to a malicious process to elevate its uid to 0 (root)
@@ -68,6 +74,11 @@ Verify that this file can not be ls'd or opened.
 You can also remove the function "remove rootkit" to check that lsmod would show it 
 otherwise.
 
+5) Hides processes from the process table when a user does a "ps"
+- There is an array specified in includes.h. This array called HIDDEN_PROCESSES has
+a few processes. Add whatever process you would like to hide(test) and load the module.
+Verify that the process is not in the output of ps.
+
 Resources:
 
 For figuring out how to intercept syscall table:
@@ -77,3 +88,4 @@ http://books.gigatux.nl/mirror/networksecuritytools/0596007949/networkst-CHP-7-S
 Other:
 http://stackoverflow.com/questions/8250078/how-can-i-get-a-filename-from-a-file-descriptor-inside-a-kernel-module
 http://stackoverflow.com/questions/1184274/how-to-read-write-files-within-a-linux-kernel-module
+http://lxr.free-electrons.com/
