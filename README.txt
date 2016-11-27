@@ -1,5 +1,9 @@
-CSE 509 Project: Rootkit
-Amit Bapat
+SE 509 Project: Rootkit
+Amit Bapat          
+Varun Sayal             108766516
+Leixiang Wu         
+Poojitha Ponakala
+
 
 System Specification:
     Linux Distro: Ubuntu 14.04 64 bit
@@ -18,6 +22,14 @@ process and grant root privileges.
 2) We called original read inside hacked read and modified the buf and
  bytes returned such that backdoor is filtered out if the file is 
  /etc/passwd or /etc/shadow
+3) Hide certain files.
+    -  The getdents and open syscalls were hijacked so that any of the
+files provided in the includes.h array will not be returned by getdents. In the case of
+open if one of our hidden files is an argument, we simply return -ENOENT
+4) Hide the module from lsmod. 
+    - In the hijacked read, we simply remove the entry for our
+rootkit (named  "rookit"). Once this entry is removed from /proc/modules, lsmod will cease
+printing it. It is also removed from a regular cat of the file.
 
 
 Testing:
@@ -30,6 +42,14 @@ it will succeed and print out the current privileges.
 - the backdoor will be not be shown while the module is loaded; 
 unload the module and check contents again - you will see the backdoor 
 now
+3) Hide certain files from "ls" and similar commands:
+- There is an array specified in includes.h. This array called HIDDEN_FILES has 
+a few different file names. Add whatever file you would like to test and load the module.
+Verify that this file can not be ls'd or opened.
+4) Hide the module from lsmod
+- Load the module and run lsmod. All other modules except "rootkit" will be displayed.
+You can also remove the function "remove rootkit" to check that lsmod would show it 
+otherwise.
 
 Resources:
 
