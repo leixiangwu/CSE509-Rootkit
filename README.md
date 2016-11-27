@@ -196,6 +196,9 @@
 
 # Resources
 
+    Location of the ISO we used for testing:
+    https://drive.google.com/open?id=0B6BjU_C8SKLtSFdNWHc2dHJGN0E
+
 	For figuring out how to intercept syscall table:
 	http://stackoverflow.com/questions/2103315/linux-kernel-system-call-hooking-example
 	http://books.gigatux.nl/mirror/networksecuritytools/0596007949/networkst-CHP-7-SECT-2.html
