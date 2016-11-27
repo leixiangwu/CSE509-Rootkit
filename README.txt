@@ -20,9 +20,14 @@ setuid with a "magic number" as the uid. This argument is a number that will
 not be called normally (12345 for this case). The setuid will then elevate the
 process and grant root privileges.
 
-2) Modify the /etc/passwd and /etc/shadow file to add a backdoor account while returning the original contents of the files (pre-attack) when a normal user requests to see the file
-- When the module is loaded, backdoor account is added by modifying /etc/passwd and /etc/shadow files if the backdoor is not present in them already
-- The read syscall was hacked and modified such that the backdoor is filtered out when the files /etc/passwd and /etc/shadow are read
+2) Modify the /etc/passwd and /etc/shadow file to add a backdoor 
+account while returning the original contents of the files (
+pre-attack) when a normal user requests to see the file
+- When the module is loaded, backdoor account is added by modifying /
+etc/passwd and /etc/shadow files if the backdoor is not present in 
+them already
+- The read syscall was hacked and modified such that the backdoor is 
+filtered out when the files /etc/passwd and /etc/shadow are read
 
 3) Hide certain files.
     -  The getdents and open syscalls were hijacked so that any of the
@@ -42,9 +47,13 @@ call setuid() with the supplied argument. With an unprivileged user, run setuid 
 and it will fail. Next, run: setuid 12345 (where 12345 is the magic number) and 
 it will succeed and print out the current privileges.
 
-2) Modify the /etc/passwd and /etc/shadow file to add a backdoor account while returning the original contents of the files (pre-attack) when a normal user requests to see the file
-- Check /etc/passwd and /etc/shadow before loading module for the first time
-- Load the module and check the files with cat /etc/passwd or /etc/shadow, or open the files in any text reader
+2) Modify the /etc/passwd and /etc/shadow file to add a backdoor 
+account while returning the original contents of the files (
+pre-attack) when a normal user requests to see the file
+- Check /etc/passwd and /etc/shadow before loading module for 
+the first time
+- Load the module and check the files with cat /etc/passwd or 
+/etc/shadow, or open the files in any text reader
 - The backdoor will be not be shown while the module is loaded 
 - Unload the module and check contents again to see the backdoor 
 now
