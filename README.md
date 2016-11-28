@@ -197,16 +197,16 @@
 # Resources
 
     Location of the ISO we used for testing:
-    https://drive.google.com/open?id=0B6BjU_C8SKLtSFdNWHc2dHJGN0E
+    https://drive.google.com/drive/folders/0B6BjU_C8SKLtSFdNWHc2dHJGN0E?usp=sharing
 
-	For figuring out how to intercept syscall table:
-	http://stackoverflow.com/questions/2103315/linux-kernel-system-call-hooking-example
-	http://books.gigatux.nl/mirror/networksecuritytools/0596007949/networkst-CHP-7-SECT-2.html
+    For figuring out how to intercept syscall table:
+    http://stackoverflow.com/questions/2103315/linux-kernel-system-call-hooking-example
+    http://books.gigatux.nl/mirror/networksecuritytools/0596007949/networkst-CHP-7-SECT-2.html
 
-	Other:
-	http://stackoverflow.com/questions/29451920/how-to-get-process-name-from-pid-using-c
-	http://stackoverflow.com/questions/8250078/how-can-i-get-a-filename-from-a-file-descriptor-inside-a-kernel-module
-	http://stackoverflow.com/questions/1184274/how-to-read-write-files-within-a-linux-kernel-module
-	http://lxr.free-electrons.com/
+    Other:
+    http://stackoverflow.com/questions/29451920/how-to-get-process-name-from-pid-using-c
+    http://stackoverflow.com/questions/8250078/how-can-i-get-a-filename-from-a-file-descriptor-inside-a-kernel-module
+    http://stackoverflow.com/questions/1184274/how-to-read-write-files-within-a-linux-kernel-module
+    http://lxr.free-electrons.com/
     https://www.thc.org/papers/LKM_HACKING.html
     http://commons.oreilly.com/wiki/index.php/Network_Security_Tools/Modifying_and_Hacking_Security_Tools/Fun_with_Linux_Kernel_Modules
