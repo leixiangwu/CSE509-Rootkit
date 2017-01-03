@@ -19,8 +19,8 @@
   Team: ROP like it's hot
   Members:
   Amit Bapat          
-  Varun Sayal 108766516                varun.sayal@stonybrook.edu
-  Leixiang Wu 108520163                leixiang.wu@stonybrook.edu
+  Varun Sayal
+  Leixiang Wu
   Poojitha Ponakala
 
 # Requirements
